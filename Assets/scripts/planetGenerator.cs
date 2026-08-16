@@ -10,7 +10,11 @@ public class planetGenerator : MonoBehaviour
     [Header("random generation")]
     public float noiseScale;
     public float noiseStrength;
+
     public int octaves;
+    public float octaveStengthDecrease;
+    public float octaveScaleIncrease;
+
     public int seed;
 
     [Header("collider")]
@@ -70,8 +74,16 @@ public class planetGenerator : MonoBehaviour
 
                     indexLookup[x + y * res + z * res * res] = index;
 
-                    float noiseValue = Mathf.Clamp01(Noise3D(x * noiseScale + seed, y * noiseScale + seed, z * noiseScale + seed));
-                    Vector3 vertPos = cubeSphere(cubePos * 2) * size + (normal * noiseValue * noiseStrength);
+                    float noiseValue = Noise3D(x * noiseScale + seed, y * noiseScale + seed, z * noiseScale + seed) * noiseStrength;
+                    float oScale = noiseScale;
+                    float oStrength = noiseStrength;
+                    for (int i = 0; i < octaves; i++)
+                    {
+                        oScale += octaveScaleIncrease;
+                        oStrength = Mathf.Max(oStrength - octaveStengthDecrease, 0);
+                        noiseValue += Noise3D(x * oScale + i * 10, y * oScale + i * 10, z * oScale + i * 10) * oStrength;
+                    }
+                    Vector3 vertPos = cubeSphere(cubePos * 2) * size + normal * noiseValue;
 
                     vertices[index] = vertPos;
                     noiseUV[index] = new Vector2(noiseValue, 0);
