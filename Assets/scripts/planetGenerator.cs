@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Threading.Tasks;
 using UnityEngine;
 
 public class planetGenerator : MonoBehaviour
@@ -6,16 +7,34 @@ public class planetGenerator : MonoBehaviour
     [Header("making cube sphere")]
     public float size;
     public int subDivisions;
+    Mesh mesh;
 
     [Header("random generation")]
     public float noiseScale;
     public float noiseStrength;
 
     public int octaves;
-    public float octaveStengthDecrease;
-    public float octaveScaleIncrease;
+    public float octaveStrengthChange;
+    public float octaveSizeChange;
 
     public int seed;
+
+    [Header("color")]
+    public float sampleDistance;
+    public reagion[] reagions;
+    [System.Serializable] public struct reagion
+    {
+        public float height;
+        public Vector2 minMaxSteepnes;
+        public Color color;
+
+        public reagion(float newHeight, Color newColor, Vector2 newSteepness)
+        {
+            height = newHeight;
+            minMaxSteepnes = newSteepness;
+            color = newColor;
+        }
+    }
 
     [Header("collider")]
     public MeshCollider col;
@@ -37,7 +56,7 @@ public class planetGenerator : MonoBehaviour
     {
         MeshFilter filter = GetComponent<MeshFilter>();
 
-        Mesh mesh = new Mesh();
+        mesh = new Mesh();
         mesh.name = "planet";
 
         int res = subDivisions + 2;
@@ -46,6 +65,7 @@ public class planetGenerator : MonoBehaviour
         Vector3[] vertices = new Vector3[surfaceVertices];
         Vector2[] uv = new Vector2[surfaceVertices];
         Vector2[] noiseUV = new Vector2[surfaceVertices];
+        Color[] vertColors = new Color[surfaceVertices];
 
         var indexLookup = new Dictionary<int, int>();
 
@@ -63,8 +83,9 @@ public class planetGenerator : MonoBehaviour
 
                     if (!isSurface) continue;
 
-                    Vector3 cubePos = new Vector3((x - half) / (subDivisions + 1), (y - half) / (subDivisions + 1), (z - half) / (subDivisions + 1));
-                    Vector3 normal = cubePos.normalized;
+                    Vector3 pos = cubeSphere(new Vector3((x - half) / (subDivisions + 1), (y - half) / (subDivisions + 1), (z - half) / (subDivisions + 1)) * 2);
+                    Vector3 normal = pos.normalized;
+
                     float u = (float)x / (subDivisions + 1) * uvScale;
                     float v = (float)y / (subDivisions + 1) * uvScale;
                     float w = (float)z / (subDivisions + 1) * uvScale;
@@ -74,24 +95,31 @@ public class planetGenerator : MonoBehaviour
 
                     indexLookup[x + y * res + z * res * res] = index;
 
-                    float noiseValue = Noise3D(x * noiseScale + seed, y * noiseScale + seed, z * noiseScale + seed) * noiseStrength;
-                    float oScale = noiseScale;
-                    float oStrength = noiseStrength;
-                    for (int i = 0; i < octaves; i++)
-                    {
-                        oScale += octaveScaleIncrease;
-                        oStrength = Mathf.Max(oStrength - octaveStengthDecrease, 0);
-                        noiseValue += Noise3D(x * oScale + i * 10, y * oScale + i * 10, z * oScale + i * 10) * oStrength;
-                    }
-                    Vector3 vertPos = cubeSphere(cubePos * 2) * size + normal * noiseValue;
+                    float noiseValue = calculateHeight(pos);
 
+                    Vector3 vertPos = pos * size + normal * noiseValue * noiseStrength;
+                    noiseValue = noiseValue * 0.5f + 0.5f;
+                    Vector3 grad = calculateGradient(pos, sampleDistance);
+                    grad -= normal * Vector3.Dot(grad, normal);
+                    float slope = (noiseStrength / size) * grad.magnitude;
+                    float steepnessDeg = Mathf.Atan(slope) * Mathf.Rad2Deg;
+
+                    reagion currentReagion = new reagion(0, new Color(), new Vector2());
+                    for (int i = reagions.Length - 1; i >= 0; i--)
+                    {
+                        if (noiseValue >= reagions[i].height && steepnessDeg >= reagions[i].minMaxSteepnes.x && steepnessDeg <= reagions[i].minMaxSteepnes.y)
+                        {
+                            currentReagion = reagions[i];
+                            break;
+                        }
+                    }
+                    vertColors[index] = currentReagion.color;
                     vertices[index] = vertPos;
                     noiseUV[index] = new Vector2(noiseValue, 0);
                     index++;
                 }
             }
         }
-
         int GetIndex(int gx, int gy, int gz) => indexLookup[gx + gy * res + gz * res * res];
 
         var triList = new List<int>();
@@ -139,6 +167,7 @@ public class planetGenerator : MonoBehaviour
         mesh.uv = uv;
         mesh.uv2 = noiseUV;
         mesh.triangles = triangles;
+        mesh.colors = vertColors;
 
         mesh.RecalculateNormals();
         mesh.RecalculateBounds();
@@ -149,28 +178,40 @@ public class planetGenerator : MonoBehaviour
             GetComponent<MeshCollider>().sharedMesh = mesh;
         }
     }
-    float Noise3D(float x, float y, float z)
-    {
-        float xy = Mathf.PerlinNoise(x, y);
-        float yz = Mathf.PerlinNoise(y, z);
-        float xz = Mathf.PerlinNoise(x, z);
 
-        float yx = Mathf.PerlinNoise(y, x);
-        float zy = Mathf.PerlinNoise(z, y);
-        float zx = Mathf.PerlinNoise(z, x);
-
-        return (xy + yz + xz + yx + zy + zx) / 6;
-    }
-    public static Vector3 cubeSphere(Vector3 p)
+    Vector3 cubeSphere(Vector3 p)
     {
         float x2 = p.x * p.x;
         float y2 = p.y * p.y;
         float z2 = p.z * p.z;
 
-        float x = p.x * Mathf.Sqrt(Mathf.Max(0f, 1f - y2 / 2f - z2 / 2f + (y2 * z2) / 3f));
-        float y = p.y * Mathf.Sqrt(Mathf.Max(0f, 1f - z2 / 2f - x2 / 2f + (z2 * x2) / 3f));
-        float z = p.z * Mathf.Sqrt(Mathf.Max(0f, 1f - x2 / 2f - y2 / 2f + (x2 * y2) / 3f));
+        float x = p.x * Mathf.Sqrt(Mathf.Max(0f, 1f - y2 / 2f - z2 / 2f + y2 * z2 / 3f));
+        float y = p.y * Mathf.Sqrt(Mathf.Max(0f, 1f - z2 / 2f - x2 / 2f + z2 * x2 / 3f));
+        float z = p.z * Mathf.Sqrt(Mathf.Max(0f, 1f - x2 / 2f - y2 / 2f + x2 * y2 / 3f));
 
         return new Vector3(x, y, z);
+    }
+    float calculateHeight(Vector3 pos)
+    {
+        float noiseValue = 0;
+        float scale = noiseScale;
+        float strength = 1;
+        float maxStrength = 0;
+        for (int i = 0; i < octaves; i++)
+        {
+            noiseValue += perlinNoise3D.perlin3D(pos.x * scale + seed, pos.y * scale + seed, pos.z * scale + seed) * strength;
+            maxStrength += scale;
+            strength *= octaveStrengthChange;
+            scale *= octaveSizeChange;
+        }
+        return noiseValue;
+    }
+    Vector3 calculateGradient(Vector3 pos, float step)
+    {
+        float height = calculateHeight(pos);
+        float dx = (calculateHeight(pos + new Vector3(step, 0, 0)) - height) / step;
+        float dy = (calculateHeight(pos + new Vector3(0, step, 0)) - height) / step;
+        float dz = (calculateHeight(pos + new Vector3(0, 0, step)) - height) / step;
+        return new Vector3(dx, dy, dz);
     }
 }
