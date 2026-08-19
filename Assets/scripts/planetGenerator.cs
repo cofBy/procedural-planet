@@ -22,7 +22,8 @@ public class planetGenerator : MonoBehaviour
     [Header("color")]
     public float sampleDistance;
     public reagion[] reagions;
-    [System.Serializable] public struct reagion
+    [System.Serializable]
+    public struct reagion
     {
         public float height;
         public Vector2 minMaxSteepnes;
@@ -58,6 +59,7 @@ public class planetGenerator : MonoBehaviour
 
         mesh = new Mesh();
         mesh.name = "planet";
+        mesh.indexFormat = UnityEngine.Rendering.IndexFormat.UInt32;
 
         int res = subDivisions + 2;
         int surfaceVertices = (int)Mathf.Pow(res, 3) - (int)Mathf.Pow(subDivisions, 3);
