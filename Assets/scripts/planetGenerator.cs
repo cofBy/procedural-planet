@@ -1,5 +1,4 @@
 using System.Collections.Generic;
-using System.Threading.Tasks;
 using UnityEngine;
 
 public class planetGenerator : MonoBehaviour
@@ -20,22 +19,10 @@ public class planetGenerator : MonoBehaviour
     public int seed;
 
     [Header("color")]
+    public Gradient terrainColor;
     public float sampleDistance;
-    public reagion[] reagions;
-    [System.Serializable]
-    public struct reagion
-    {
-        public float height;
-        public Vector2 minMaxSteepnes;
-        public Color color;
-
-        public reagion(float newHeight, Color newColor, Vector2 newSteepness)
-        {
-            height = newHeight;
-            minMaxSteepnes = newSteepness;
-            color = newColor;
-        }
-    }
+    public Material terrainMat;
+    public int colorRes;
 
     [Header("collider")]
     public MeshCollider col;
@@ -67,7 +54,6 @@ public class planetGenerator : MonoBehaviour
         Vector3[] vertices = new Vector3[surfaceVertices];
         Vector2[] uv = new Vector2[surfaceVertices];
         Vector2[] noiseUV = new Vector2[surfaceVertices];
-        Color[] vertColors = new Color[surfaceVertices];
 
         var indexLookup = new Dictionary<int, int>();
 
@@ -100,32 +86,27 @@ public class planetGenerator : MonoBehaviour
                     float noiseValue = calculateHeight(pos);
 
                     Vector3 vertPos = pos * size + normal * noiseValue * noiseStrength;
-                    noiseValue = noiseValue * 0.5f + 0.5f;
                     Vector3 grad = calculateGradient(pos, sampleDistance);
                     grad -= normal * Vector3.Dot(grad, normal);
                     float slope = (noiseStrength / size) * grad.magnitude;
                     float steepnessDeg = Mathf.Atan(slope) * Mathf.Rad2Deg;
-
-                    reagion currentReagion = new reagion(0, new Color(), new Vector2());
-                    for (int i = reagions.Length - 1; i >= 0; i--)
-                    {
-                        if (noiseValue >= reagions[i].height && steepnessDeg >= reagions[i].minMaxSteepnes.x && steepnessDeg <= reagions[i].minMaxSteepnes.y)
-                        {
-                            currentReagion = reagions[i];
-                            break;
-                        }
-                    }
-                    vertColors[index] = currentReagion.color;
                     vertices[index] = vertPos;
-                    noiseUV[index] = new Vector2(noiseValue, 0);
+                    noiseUV[index] = new Vector2(noiseValue * 0.5f + 0.5f, steepnessDeg / 90f);
                     index++;
                 }
             }
         }
+
+        Texture2D gradientTex = new Texture2D(colorRes, 1, TextureFormat.RGBAHalf, false);
+        for (int i = 0; i < colorRes; i++)
+        {
+            gradientTex.SetPixel(i, 0, terrainColor.Evaluate((float)i / colorRes));
+        }
+        gradientTex.Apply(false);
+        terrainMat.SetTexture("_colorGradient", gradientTex);
+
         int GetIndex(int gx, int gy, int gz) => indexLookup[gx + gy * res + gz * res * res];
-
         var triList = new List<int>();
-
         void AddQuad(int a, int b, int c, int d)
         {
             triList.Add(a);
@@ -135,9 +116,7 @@ public class planetGenerator : MonoBehaviour
             triList.Add(c);
             triList.Add(d);
         }
-
         int last = subDivisions + 1;
-
         for (int y = 0; y < last; y++)
         {
             for (int z = 0; z < last; z++)
@@ -162,14 +141,12 @@ public class planetGenerator : MonoBehaviour
                 AddQuad(GetIndex(x, y, last), GetIndex(x + 1, y, last), GetIndex(x + 1, y + 1, last), GetIndex(x, y + 1, last));
             }
         }
-
         int[] triangles = triList.ToArray();
 
         mesh.vertices = vertices;
         mesh.uv = uv;
         mesh.uv2 = noiseUV;
         mesh.triangles = triangles;
-        mesh.colors = vertColors;
 
         mesh.RecalculateNormals();
         mesh.RecalculateBounds();
