@@ -20,6 +20,8 @@ public class planetGenerator : MonoBehaviour
 
     [Header("color")]
     public Gradient terrainColor;
+    public Gradient steepColor;
+    public AnimationCurve steepnessCurve;
     public float sampleDistance;
     public Material terrainMat;
     public int colorRes;
@@ -97,10 +99,17 @@ public class planetGenerator : MonoBehaviour
             }
         }
 
-        Texture2D gradientTex = new Texture2D(colorRes, 1, TextureFormat.RGBAHalf, false);
-        for (int i = 0; i < colorRes; i++)
+        Texture2D gradientTex = new Texture2D(colorRes, colorRes, TextureFormat.RGBAHalf, false);
+        for (int u = 0; u < colorRes; u++)
         {
-            gradientTex.SetPixel(i, 0, terrainColor.Evaluate((float)i / colorRes));
+            for (int v = 0; v < colorRes; v++)
+            {
+                Color flat = terrainColor.Evaluate((float)u / colorRes);
+                Color steep = steepColor.Evaluate((float)u / colorRes);
+                float blend = steepnessCurve.Evaluate((float)v / colorRes);
+
+                gradientTex.SetPixel(u, v, Color.Lerp(flat, steep, blend));
+            }
         }
         gradientTex.Apply(false);
         terrainMat.SetTexture("_colorGradient", gradientTex);
