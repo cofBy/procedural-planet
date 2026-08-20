@@ -35,11 +35,6 @@ public class planetGenerator : MonoBehaviour
 
     private void Start()
     {
-        seed = Random.Range(0, 99);
-        generate();
-    }
-    private void OnValidate()
-    {
         generate();
     }
     public void generate()
